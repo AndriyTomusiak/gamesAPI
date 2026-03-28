@@ -1,3 +1,4 @@
+using System.Text.Json;
 using gamesApi.Data;
 using Microsoft.EntityFrameworkCore;
 
@@ -10,11 +11,39 @@ public static class PublicRoutes
         var group = app.MapGroup("/api/games");
 
         group.MapGet("/", async (GamesContext db) =>
-            Results.Ok(await db.Games.ToListAsync()));
+        {
+            var games = await db.Games.ToListAsync();
+            var result = new Dictionary<string, object>();
+            foreach (var g in games)
+            {
+                result[g.Slug] = new
+                {
+                    g.Id,
+                    g.Slug,
+                    g.Genre,
+                    g.Description,
+                    g.ImageUrl,
+                    Config = g.Config?.RootElement
+                };
+            }
+            return Results.Ok(result);
+        });
 
-        group.MapGet("/{id}", async (int id, GamesContext db) =>
-            await db.Games.FindAsync(id) is { } game
-                ? Results.Ok(game)
-                : Results.NotFound(new { Message = $"Game with id {id} not found" }));
+        group.MapGet("/{slug}", async (string slug, GamesContext db) =>
+        {
+            var game = await db.Games.FirstOrDefaultAsync(g => g.Slug == slug);
+            if (game is null)
+                return Results.NotFound(new { Message = $"Game '{slug}' not found" });
+
+            return Results.Ok(new
+            {
+                game.Id,
+                game.Slug,
+                game.Genre,
+                game.Description,
+                game.ImageUrl,
+                Config = game.Config?.RootElement
+            });
+        });
     }
 }

@@ -16,16 +16,22 @@ namespace gamesApi.Migrations
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
-                    Name = table.Column<string>(type: "TEXT", nullable: false),
+                    Slug = table.Column<string>(type: "TEXT", nullable: false),
                     Genre = table.Column<string>(type: "TEXT", nullable: false),
                     Description = table.Column<string>(type: "TEXT", nullable: false),
-                    Price = table.Column<decimal>(type: "TEXT", nullable: false),
-                    ImageUrl = table.Column<string>(type: "TEXT", nullable: false)
+                    ImageUrl = table.Column<string>(type: "TEXT", nullable: false),
+                    IsSystem = table.Column<bool>(type: "INTEGER", nullable: false),
+                    Config = table.Column<string>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Games", x => x.Id);
                 });
+
+            migrationBuilder.InsertData(
+                table: "Games",
+                columns: new[] { "Id", "Config", "Description", "Genre", "ImageUrl", "IsSystem", "Slug" },
+                values: new object[] { 1, "{\"items\":[],\"cardBack\":\"\",\"hints\":5,\"title\":\"Magic Memory\"}", "", "Logic", "", true, "magicMemory" });
         }
 
         /// <inheritdoc />

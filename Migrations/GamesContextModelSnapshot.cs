@@ -22,6 +22,9 @@ namespace gamesApi.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("Config")
+                        .HasColumnType("TEXT");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -34,16 +37,28 @@ namespace gamesApi.Migrations
                         .IsRequired()
                         .HasColumnType("TEXT");
 
-                    b.Property<string>("Name")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
+                    b.Property<bool>("IsSystem")
+                        .HasColumnType("INTEGER");
 
-                    b.Property<decimal>("Price")
+                    b.Property<string>("Slug")
+                        .IsRequired()
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
                     b.ToTable("Games");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Config = "{\"items\":[],\"cardBack\":\"\",\"hints\":5,\"title\":\"Magic Memory\"}",
+                            Description = "",
+                            Genre = "Logic",
+                            ImageUrl = "",
+                            IsSystem = true,
+                            Slug = "magicMemory"
+                        });
                 });
 #pragma warning restore 612, 618
         }

@@ -12,14 +12,12 @@
 
         .form-section { background: #1a1a1a; padding: 20px; border-radius: 8px; margin-bottom: 20px; border: 1px solid #333; }
         .form-row { display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
-        input { background: #2a2a2a; border: 1px solid #444; color: #e0e0e0; padding: 8px 12px; border-radius: 4px; font-size: 14px; }
-        input:focus { outline: none; border-color: #646cff; }
-        input::placeholder { color: #666; }
+        input, textarea { background: #2a2a2a; border: 1px solid #444; color: #e0e0e0; padding: 8px 12px; border-radius: 4px; font-size: 14px; font-family: inherit; }
+        input:focus, textarea:focus { outline: none; border-color: #646cff; }
+        input::placeholder, textarea::placeholder { color: #666; }
         .form-row input { flex: 1; min-width: 150px; }
 
         button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; }
-        .btn-add { background: #22c55e; color: #000; font-weight: 600; }
-        .btn-add:hover { background: #16a34a; }
         .btn-edit { background: #3b82f6; color: #fff; }
         .btn-edit:hover { background: #2563eb; }
         .btn-delete { background: #ef4444; color: #fff; }
@@ -42,6 +40,15 @@
         .upload-preview { width: 40px; height: 40px; border-radius: 4px; object-fit: cover; display: none; border: 1px solid #444; }
         .upload-name { color: #888; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
         .game-thumb { width: 48px; height: 48px; border-radius: 4px; object-fit: cover; }
+        .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+        .badge-system { background: #854d0e; color: #fbbf24; }
+        .config-editor { width: 100%; min-height: 200px; font-family: 'SF Mono', Monaco, monospace; font-size: 13px; resize: vertical; }
+        .item-wrap { position: relative; display: inline-block; }
+        .item-remove { position: absolute; top: -6px; right: -6px; width: 18px; height: 18px; background: #ef4444; color: #fff; border: none; border-radius: 50%; font-size: 12px; line-height: 18px; text-align: center; cursor: pointer; padding: 0; }
+        .items-grid { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+        .item-slot { width: 60px; height: 60px; border: 2px dashed #444; border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; overflow: visible; }
+        .item-slot img { width: 100%; height: 100%; object-fit: cover; border-radius: 4px; }
+        .item-slot .slot-label { color: #555; font-size: 11px; }
     </style>
 </head>
 <body>
@@ -49,13 +56,12 @@
 
     <div id="status" class="status"></div>
 
-    <div class="form-section">
-        <h2 id="form-title">Add New Game</h2>
+    <div class="form-section" id="edit-form" style="display:none;">
+        <h2 id="form-title">Edit Game</h2>
         <input type="hidden" id="edit-id">
         <div class="form-row">
-            <input type="text" id="name" placeholder="Game name" required>
+            <input type="text" id="slug" placeholder="Slug (e.g. magicMemory)" required>
             <input type="text" id="genre" placeholder="Genre" required>
-            <input type="number" id="price" placeholder="Price" step="0.01" min="0">
         </div>
         <div class="form-row">
             <input type="text" id="description" placeholder="Description">
@@ -67,9 +73,10 @@
             </div>
             <input type="hidden" id="imageUrl">
         </div>
-        <div class="form-row">
-            <button class="btn-add" id="submit-btn" onclick="submitForm()">Add</button>
-            <button class="btn-cancel" id="cancel-btn" onclick="cancelEdit()" style="display:none;">Cancel</button>
+        <div id="config-section"></div>
+        <div class="form-row" style="margin-top:10px;">
+            <button class="btn-edit" id="submit-btn" onclick="submitForm()">Save</button>
+            <button class="btn-cancel" id="cancel-btn" onclick="cancelEdit()">Cancel</button>
         </div>
     </div>
 
@@ -77,11 +84,10 @@
         <thead>
             <tr>
                 <th>ID</th>
+                <th>Slug</th>
                 <th>Image</th>
-                <th>Name</th>
                 <th>Genre</th>
                 <th>Description</th>
-                <th>Price</th>
                 <th>Actions</th>
             </tr>
         </thead>
@@ -90,25 +96,40 @@
 
     <script>
         const API = '/api/admin/games';
+        const ITEMS_COUNT = 8;
+        let gamesCache = [];
+        let currentSlug = '';
+        // magicMemory config state
+        let mmItems = []; // array of urls (length up to 8)
+        let mmItemFiles = []; // array of File|null (pending uploads per slot)
+        let mmCardBackUrl = '';
+        let mmCardBackFile = null;
 
         async function loadGames() {
-            const res = await fetch('/api/games');
-            const games = await res.json();
+            const res = await fetch(API);
+            gamesCache = await res.json();
             const tbody = document.getElementById('games-table');
-            tbody.innerHTML = games.map(g => `
+            tbody.innerHTML = gamesCache.map(g => {
+                const systemBadge = g.isSystem ? ' <span class="badge badge-system">system</span>' : '';
+                const deleteBtn = g.isSystem ? '' : `<button class="btn-delete" onclick="deleteGame(${g.id})">Delete</button>`;
+                return `
                 <tr>
-                    <td>${g.id}</td>
+                    <td>${g.id}${systemBadge}</td>
+                    <td>${g.slug || '—'}</td>
                     <td>${g.imageUrl ? `<img src="${g.imageUrl}" class="game-thumb">` : '—'}</td>
-                    <td>${g.name}</td>
                     <td>${g.genre}</td>
                     <td>${g.description || '—'}</td>
-                    <td>${g.price > 0 ? '$' + g.price : 'Free'}</td>
                     <td class="actions">
-                        <button class="btn-edit" onclick='startEdit(${JSON.stringify(g)})'>Edit</button>
-                        <button class="btn-delete" onclick="deleteGame(${g.id})">Delete</button>
+                        <button class="btn-edit" onclick="startEditById(${g.id})">Edit</button>
+                        ${deleteBtn}
                     </td>
-                </tr>
-            `).join('');
+                </tr>`;
+            }).join('');
+        }
+
+        function startEditById(id) {
+            const game = gamesCache.find(g => g.id === id);
+            if (game) startEdit(game);
         }
 
         function onFileSelected(input) {
@@ -125,13 +146,9 @@
             }
         }
 
-        async function uploadImage() {
-            const fileInput = document.getElementById('imageFile');
-            if (!fileInput.files.length) return null;
-
+        async function uploadSingleFile(file) {
             const formData = new FormData();
-            formData.append('file', fileInput.files[0]);
-
+            formData.append('file', file);
             const res = await fetch('/api/admin/upload', { method: 'POST', body: formData });
             if (!res.ok) {
                 const err = await res.json();
@@ -141,39 +158,181 @@
             return result.url;
         }
 
-        async function submitForm() {
-            const editId = document.getElementById('edit-id').value;
+        async function uploadImage() {
+            const fileInput = document.getElementById('imageFile');
+            if (!fileInput.files.length) return null;
+            return uploadSingleFile(fileInput.files[0]);
+        }
 
-            if (!document.getElementById('name').value || !document.getElementById('genre').value) {
-                showStatus('Name and genre are required', 'error');
-                return;
+        // --- Magic Memory config UI ---
+
+        function renderMagicMemoryConfig(config) {
+            const c = config || {};
+            mmItems = Array.isArray(c.items) ? [...c.items] : [];
+            mmItemFiles = new Array(ITEMS_COUNT).fill(null);
+            mmCardBackUrl = c.cardBack || '';
+            mmCardBackFile = null;
+
+            const section = document.getElementById('config-section');
+            section.innerHTML = `
+                <h2 style="margin-top:10px;">Game Config — Magic Memory</h2>
+                <div class="form-row">
+                    <input type="text" id="cfg-title" placeholder="Game title" value="${c.title || ''}">
+                    <input type="number" id="cfg-hints" placeholder="Hints count" min="0" value="${c.hints ?? 5}">
+                </div>
+                <div class="form-row">
+                    <div class="upload-area">
+                        <input type="file" id="cfg-cardback-file" accept="image/*" style="display:none" onchange="onCardBackPicked(this)">
+                        <label for="cfg-cardback-file" class="upload-btn">Card Back Image</label>
+                        <img id="cfg-cardback-preview" class="upload-preview" ${mmCardBackUrl ? `src="${mmCardBackUrl}" style="display:block;"` : ''}>
+                        <span id="cfg-cardback-name" class="upload-name">${mmCardBackUrl ? 'Current' : ''}</span>
+                    </div>
+                </div>
+                <h2 style="margin-top:10px;">Items (8 images)</h2>
+                <div class="items-grid" id="cfg-items-grid"></div>
+                <input type="file" id="cfg-item-file-input" accept="image/*" style="display:none">
+            `;
+            renderItemSlots();
+        }
+
+        function renderItemSlots() {
+            const grid = document.getElementById('cfg-items-grid');
+            grid.innerHTML = '';
+            for (let i = 0; i < ITEMS_COUNT; i++) {
+                const hasImage = mmItemFiles[i] || mmItems[i];
+                const slot = document.createElement('div');
+                slot.className = 'item-slot';
+                if (hasImage) {
+                    const src = mmItemFiles[i] ? URL.createObjectURL(mmItemFiles[i]) : mmItems[i];
+                    slot.innerHTML = `<img src="${src}">`;
+                    const btn = document.createElement('button');
+                    btn.className = 'item-remove';
+                    btn.textContent = '×';
+                    btn.onclick = (e) => { e.stopPropagation(); removeItemSlot(i); };
+                    slot.appendChild(btn);
+                } else {
+                    slot.innerHTML = '<span class="slot-label">' + (i + 1) + '</span>';
+                }
+                slot.onclick = () => pickItemFile(i);
+                grid.appendChild(slot);
+            }
+        }
+
+        function pickItemFile(index) {
+            const input = document.getElementById('cfg-item-file-input');
+            input.onchange = () => {
+                if (input.files[0]) {
+                    mmItemFiles[index] = input.files[0];
+                    mmItems[index] = mmItems[index] || '__pending__';
+                    renderItemSlots();
+                }
+                input.value = '';
+            };
+            input.click();
+        }
+
+        function removeItemSlot(index) {
+            mmItems[index] = '';
+            mmItemFiles[index] = null;
+            renderItemSlots();
+        }
+
+        function onCardBackPicked(input) {
+            const file = input.files[0];
+            const preview = document.getElementById('cfg-cardback-preview');
+            const nameEl = document.getElementById('cfg-cardback-name');
+            if (file) {
+                mmCardBackFile = file;
+                preview.src = URL.createObjectURL(file);
+                preview.style.display = 'block';
+                nameEl.textContent = file.name;
+            }
+        }
+
+        async function buildMagicMemoryConfig() {
+            // Upload cardBack if new file
+            if (mmCardBackFile) {
+                mmCardBackUrl = await uploadSingleFile(mmCardBackFile);
             }
 
+            // Upload items
+            const finalItems = [];
+            for (let i = 0; i < ITEMS_COUNT; i++) {
+                if (mmItemFiles[i]) {
+                    finalItems.push(await uploadSingleFile(mmItemFiles[i]));
+                } else if (mmItems[i] && mmItems[i] !== '__pending__') {
+                    finalItems.push(mmItems[i]);
+                }
+            }
+
+            if (finalItems.length !== ITEMS_COUNT) {
+                throw new Error(`Items: need exactly ${ITEMS_COUNT} images, got ${finalItems.length}`);
+            }
+            if (!mmCardBackUrl) {
+                throw new Error('Card back image is required');
+            }
+
+            return {
+                title: document.getElementById('cfg-title').value,
+                hints: parseInt(document.getElementById('cfg-hints').value) || 0,
+                cardBack: mmCardBackUrl,
+                items: finalItems
+            };
+        }
+
+        // --- Generic config (fallback for future games) ---
+
+        function renderGenericConfig(config) {
+            const section = document.getElementById('config-section');
+            section.innerHTML = `
+                <h2 style="margin-top:10px;">Game Config (JSON)</h2>
+                <textarea id="cfg-json" class="config-editor" placeholder='{}'>${config ? JSON.stringify(config, null, 2) : ''}</textarea>
+            `;
+        }
+
+        async function buildGenericConfig() {
+            const text = document.getElementById('cfg-json').value.trim();
+            if (!text) return null;
+            return JSON.parse(text);
+        }
+
+        // --- Submit / Edit / Clear ---
+
+        async function submitForm() {
+            const editId = document.getElementById('edit-id').value;
+            if (!editId) return;
+
             try {
-                // Upload image if file selected
                 const uploadedUrl = await uploadImage();
 
+                let configObj;
+                if (currentSlug === 'magicMemory') {
+                    configObj = await buildMagicMemoryConfig();
+                } else {
+                    configObj = await buildGenericConfig();
+                }
+
                 const data = {
-                    name: document.getElementById('name').value,
+                    slug: document.getElementById('slug').value,
                     genre: document.getElementById('genre').value,
                     description: document.getElementById('description').value,
-                    price: parseFloat(document.getElementById('price').value) || 0,
-                    imageUrl: uploadedUrl || document.getElementById('imageUrl').value
+                    imageUrl: uploadedUrl || document.getElementById('imageUrl').value,
+                    config: configObj
                 };
 
-                const isEdit = editId !== '';
-                const res = await fetch(isEdit ? `${API}/${editId}` : API, {
-                    method: isEdit ? 'PUT' : 'POST',
+                const res = await fetch(`${API}/${editId}`, {
+                    method: 'PUT',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
 
                 if (res.ok) {
-                    showStatus(isEdit ? 'Game updated' : 'Game added', 'success');
+                    showStatus('Game updated', 'success');
                     clearForm();
                     loadGames();
                 } else {
-                    showStatus('Error: ' + res.statusText, 'error');
+                    const err = await res.json().catch(() => null);
+                    showStatus('Error: ' + (err?.message || res.statusText), 'error');
                 }
             } catch (e) {
                 showStatus(e.message || 'Connection error', 'error');
@@ -182,20 +341,22 @@
 
         async function deleteGame(id) {
             if (!confirm('Delete this game?')) return;
-
             const res = await fetch(`${API}/${id}`, { method: 'DELETE' });
             if (res.ok) {
                 showStatus('Game deleted', 'success');
                 loadGames();
+            } else {
+                const err = await res.json().catch(() => null);
+                showStatus(err?.message || 'Error deleting game', 'error');
             }
         }
 
         function startEdit(game) {
+            currentSlug = game.slug || '';
             document.getElementById('edit-id').value = game.id;
-            document.getElementById('name').value = game.name;
-            document.getElementById('genre').value = game.genre;
+            document.getElementById('slug').value = game.slug || '';
+            document.getElementById('genre').value = game.genre || '';
             document.getElementById('description').value = game.description || '';
-            document.getElementById('price').value = game.price;
             document.getElementById('imageUrl').value = game.imageUrl || '';
             document.getElementById('imageFile').value = '';
             const preview = document.getElementById('upload-preview');
@@ -208,30 +369,34 @@
                 preview.style.display = 'none';
                 nameEl.textContent = '';
             }
-            document.getElementById('form-title').textContent = `Editing: ${game.name}`;
-            document.getElementById('submit-btn').textContent = 'Save';
-            document.getElementById('submit-btn').className = 'btn-edit';
-            document.getElementById('cancel-btn').style.display = 'inline-block';
+
+            // Render config form based on slug
+            if (game.slug === 'magicMemory') {
+                renderMagicMemoryConfig(game.config);
+            } else {
+                renderGenericConfig(game.config);
+            }
+
+            document.getElementById('form-title').textContent = game.isSystem
+                ? `Edit: ${game.slug} (system)`
+                : `Edit: ${game.slug}`;
+            document.getElementById('edit-form').style.display = 'block';
         }
 
-        function cancelEdit() {
-            clearForm();
-        }
+        function cancelEdit() { clearForm(); }
 
         function clearForm() {
+            currentSlug = '';
             document.getElementById('edit-id').value = '';
-            document.getElementById('name').value = '';
+            document.getElementById('slug').value = '';
             document.getElementById('genre').value = '';
             document.getElementById('description').value = '';
-            document.getElementById('price').value = '';
             document.getElementById('imageUrl').value = '';
             document.getElementById('imageFile').value = '';
             document.getElementById('upload-preview').style.display = 'none';
             document.getElementById('upload-name').textContent = '';
-            document.getElementById('form-title').textContent = 'Add New Game';
-            document.getElementById('submit-btn').textContent = 'Add';
-            document.getElementById('submit-btn').className = 'btn-add';
-            document.getElementById('cancel-btn').style.display = 'none';
+            document.getElementById('config-section').innerHTML = '';
+            document.getElementById('edit-form').style.display = 'none';
         }
 
         function showStatus(msg, type) {
