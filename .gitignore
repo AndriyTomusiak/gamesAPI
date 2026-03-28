@@ -1,0 +1,11 @@
+bin/
+obj/
+
+# SQLite database
+*.db
+*.db-shm
+*.db-wal
+
+# Uploaded files
+wwwroot/images/*
+!wwwroot/images/.gitkeep

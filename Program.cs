@@ -1,17 +1,31 @@
+using Microsoft.EntityFrameworkCore;
 using gamesApi.Data;
 using gamesApi.Routes;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Реєструємо сховище як Singleton (одне на весь додаток)
-builder.Services.AddSingleton<GamesStore>();
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyHeader()
+              .AllowAnyMethod();
+    });
+});
+
+builder.Services.AddDbContext<GamesContext>(options =>
+    options.UseSqlite("Data Source=games.db"));
 
 var app = builder.Build();
 
-app.MapGet("/", () => "Games API is running");
+app.UseCors();
 
-// Підключаємо роути
-app.MapPublicRoutes();   // GET  /api/games, /api/games/{id}
-app.MapAdminRoutes();    // POST/PUT/DELETE /api/admin/games
+app.UseStaticFiles();
+
+app.MapGet("/", () => Results.Redirect("/admin/index.html"));
+
+app.MapPublicRoutes();
+app.MapAdminRoutes();
 
 app.Run();
