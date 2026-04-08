@@ -25,7 +25,6 @@ app.UseStaticFiles();
 
 app.MapGet("/", () => Results.Redirect("/admin/index.html"));
 
-app.MapPublicRoutes();
 app.MapAdminRoutes();
 
-app.Run();
+app.Run("http://localhost:5100");
